@@ -189,7 +189,7 @@
                     mood = 'Slightly Negative 😐';
                     color = 'text-yellow-500';
                 }
-                
+
                 moodLabel.textContent = mood;
                 moodLabel.className = color;
             };
@@ -223,83 +223,28 @@
                 });
             };
 
-            // Gemini API call
+            // API call to our backend
             const getGeminiResponse = async (promptText) => {
-                const systemPrompt = `You are a helpful AI assistant for a mental wellness journal. Your task is to analyze a user's journal entry and provide two things in a structured JSON format: 1) a sentiment score from -10 (very negative) to 10 (very positive), and 2) a list of at least 3 personalized, actionable suggestions.
-                The suggestions should be based on the sentiment and context of the journal entry. They should be brief, friendly, and helpful.
-                Each suggestion in the list should have a 'title', 'description', and a 'category' from the following list: ['Meditation', 'Sleep', 'Professional', 'Gratitude', 'Connect', 'General'].
-
-                Example JSON response:
-                {
-                  "sentimentScore": 7,
-                  "suggestions": [
-                    { "title": "Practice Gratitude", "description": "You had a good day! Write down three things you are grateful for to reinforce that positive feeling.", "category": "Gratitude" },
-                    { "title": "Connect with Others", "description": "Sharing your joy can double it! Tell a friend or family member about your day.", "category": "Connect" },
-                    { "title": "Mindful Moment", "description": "Even on a good day, it's good to pause. Take a moment to notice your breathing.", "category": "Meditation" }
-                  ]
-                }
-                `;
-
-                const userQuery = `My journal entry: "${promptText}"`;
-                const apiKey = "AIzaSyCAnMAsorXlJ447dW1f9nGTVPfeYnO0Pi4";
-                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
-
-                const payload = {
-                    contents: [{ parts: [{ text: userQuery }] }],
-                    systemInstruction: { parts: [{ text: systemPrompt }] },
-                    generationConfig: {
-                        responseMimeType: "application/json",
-                        responseSchema: {
-                            type: "OBJECT",
-                            properties: {
-                                "sentimentScore": { "type": "NUMBER" },
-                                "suggestions": {
-                                    "type": "ARRAY",
-                                    "items": {
-                                        "type": "OBJECT",
-                                        "properties": {
-                                            "title": { "type": "STRING" },
-                                            "description": { "type": "STRING" },
-                                            "category": { "type": "STRING" }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                };
-                
-                let retries = 0;
-                const maxRetries = 3;
-
-                const callApi = async () => {
-                    const response = await fetch(apiUrl, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-                    if (!response.ok) {
-                        if (response.status === 429 && retries < maxRetries) {
-                            retries++;
-                            const delay = Math.pow(2, retries) * 1000;
-                            return new Promise(resolve => setTimeout(() => resolve(callApi()), delay));
-                        } else {
-                            throw new Error(`API call failed with status: ${response.status}`);
-                        }
-                    }
-                    return response.json();
-                };
-
                 try {
-                    const result = await callApi();
-                    const jsonString = result?.candidates?.[0]?.content?.parts?.[0]?.text;
-                    if (!jsonString) {
-                         throw new Error("Invalid response format from Gemini API.");
+                    const response = await fetch('/api/analyze', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ entry: promptText }),
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        console.error('Error from server:', errorData.error);
+                        interventionsContainer.innerHTML = `<p class="text-red-500">Error: ${errorData.error || 'Could not get suggestions at this time.'}</p>`;
+                        return null;
                     }
-                    const parsedJson = JSON.parse(jsonString);
-                    return parsedJson;
+
+                    return await response.json();
                 } catch (error) {
-                    console.error("Error calling Gemini API:", error);
+                    console.error("Error calling backend API:", error);
+                    interventionsContainer.innerHTML = '<p class="text-red-500">Could not connect to the server. Please try again later.</p>';
                     return null;
                 }
             };
@@ -318,7 +263,7 @@
 
                 // Call Gemini API
                 const result = await getGeminiResponse(entry);
-                
+
                 // Hide loading indicator and re-enable button
                 loadingIndicator.classList.add('hidden');
                 submitBtn.disabled = false;
@@ -327,7 +272,7 @@
                 if (result) {
                     const newScore = result.sentimentScore;
                     const suggestions = result.suggestions;
-                    
+
                     updateMoodLabel(newScore);
                     renderInterventions(suggestions);
 
